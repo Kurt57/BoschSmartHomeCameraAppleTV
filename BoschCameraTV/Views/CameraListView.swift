@@ -1,0 +1,116 @@
+import SwiftUI
+
+/// Home-Screen „Meine Kameras“ – für die Bedienung mit der Siri Remote aus 3 m Entfernung.
+struct CameraListView: View {
+    let viewModel: CameraListViewModel
+    let onSelect: (Camera) -> Void
+    let onOpenSettings: () -> Void
+
+    private enum FocusTarget: Hashable {
+        case camera(Camera.ID)
+        case settings
+    }
+
+    @FocusState private var focusedTarget: FocusTarget?
+
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 60, alignment: .top), count: 3)
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 48) {
+            header
+            content
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(BackgroundGradient().ignoresSafeArea())
+    }
+
+    private var header: some View {
+        HStack(alignment: .center, spacing: 40) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Meine Kameras")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+                Text("Live-Bild über Home Assistant")
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button(action: onOpenSettings) {
+                Label("Einstellungen", systemImage: "gearshape")
+            }
+            .focused($focusedTarget, equals: .settings)
+        }
+        // Eigene Fokus-Sektion: „nach oben“ erreicht den Button von jeder Kachel aus.
+        .focusSection()
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch viewModel.state {
+        case .loading:
+            ProgressView("Kameras werden geladen…")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .failed(let message):
+            ContentUnavailableView {
+                Label("Kameras nicht verfügbar", systemImage: "exclamationmark.triangle")
+            } description: {
+                Text(message)
+            } actions: {
+                Button("Erneut laden") {
+                    Task { await viewModel.load() }
+                }
+            }
+        case .loaded(let cameras) where cameras.isEmpty:
+            ContentUnavailableView {
+                Label("Keine Kameras konfiguriert", systemImage: "video.slash")
+            } description: {
+                Text("Lege eine Datei „Cameras.json“ an (siehe README) oder aktiviere Kameras in der Konfiguration.")
+            }
+        case .loaded(let cameras):
+            cameraGrid(cameras)
+        }
+    }
+
+    private func cameraGrid(_ cameras: [Camera]) -> some View {
+        ScrollView {
+            LazyVGrid(columns: columns, alignment: .leading, spacing: 70) {
+                ForEach(cameras) { camera in
+                    CameraTile(
+                        camera: camera,
+                        isLastUsed: camera.id == viewModel.lastCameraID
+                    ) {
+                        onSelect(camera)
+                    }
+                    .focused($focusedTarget, equals: .camera(camera.id))
+                }
+            }
+            // Platz für den Fokus-Effekt (Anheben/Vergrößern) der Kacheln.
+            .padding(.vertical, 40)
+        }
+        .scrollClipDisabled()
+        .focusSection()
+        .defaultFocus($focusedTarget, viewModel.preferredCameraID.map(FocusTarget.camera))
+    }
+}
+
+/// Dezenter, dunkler Hintergrund passend zum Dark Mode.
+private struct BackgroundGradient: View {
+    var body: some View {
+        LinearGradient(
+            colors: [Color(white: 0.11), Color(white: 0.03)],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+}
+
+#Preview {
+    let settings = SettingsStore(defaults: UserDefaults(suiteName: "preview") ?? .standard)
+    let provider = LocalCameraProvider(data: Data(PreviewData.camerasJSON.utf8))
+    let viewModel = CameraListViewModel(
+        cameraService: CameraService(provider: provider, settings: settings),
+        settings: settings
+    )
+    return CameraListView(viewModel: viewModel, onSelect: { _ in }, onOpenSettings: {})
+        .task { await viewModel.load() }
+}

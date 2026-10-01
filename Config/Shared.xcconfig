@@ -1,0 +1,13 @@
+// Gemeinsame, nicht geheime Build-Einstellungen für App und Tests.
+//
+// Persönliche Werte (Apple-Team-ID, eigener Bundle-ID-Präfix) gehören in
+// Config/Local.xcconfig. Diese Datei ist per .gitignore ausgeschlossen –
+// Vorlage: Config/Local.xcconfig.example
+
+BUNDLE_ID_PREFIX = com.example
+DEVELOPMENT_TEAM =
+
+MARKETING_VERSION = 1.0
+CURRENT_PROJECT_VERSION = 1
+
+#include? "Local.xcconfig"

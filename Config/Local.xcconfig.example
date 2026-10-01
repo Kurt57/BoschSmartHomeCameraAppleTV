@@ -1,0 +1,10 @@
+// Kopiere diese Datei nach Config/Local.xcconfig und trage deine Werte ein.
+// Local.xcconfig wird nicht eingecheckt (.gitignore).
+//
+// Benötigt für die Installation auf einem echten Apple TV (automatisches Signing).
+
+// Eindeutiger Präfix, z. B. de.deinname → de.deinname.BoschCameraTV
+BUNDLE_ID_PREFIX = de.example
+
+// Team-ID aus https://developer.apple.com/account (Membership Details)
+DEVELOPMENT_TEAM = ABCDE12345

@@ -1,0 +1,23 @@
+# Xcode
+build/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+.swiftpm/
+.build/
+
+# macOS
+.DS_Store
+
+# Lokale, private Konfiguration – niemals einchecken
+Config/Local.xcconfig
+BoschCameraTV/Resources/Cameras.json
+*.secret
+.env
