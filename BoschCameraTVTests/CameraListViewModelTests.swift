@@ -58,6 +58,7 @@ struct CameraListViewModelTests {
 
     @Test func ignoresUnknownLastCamera() async {
         settings.lastCameraID = "deleted-camera"
+        settings.autoOpenLastCamera = true
         let viewModel = makeViewModel(StubCameraProvider([TestCameras.frontDoor]))
 
         await viewModel.load()
@@ -68,11 +69,22 @@ struct CameraListViewModelTests {
 
     @Test func autoOpensLastCameraOnLaunch() async {
         settings.lastCameraID = "garden"
+        settings.autoOpenLastCamera = true
         let viewModel = makeViewModel(StubCameraProvider([TestCameras.frontDoor, TestCameras.garden]))
 
         await viewModel.load()
 
         #expect(viewModel.cameraForAutoOpen() == TestCameras.garden)
+    }
+
+    @Test func sortsUnavailableCamerasToTheEnd() async {
+        var offline = TestCameras.frontDoor
+        offline.isAvailable = false
+        let viewModel = makeViewModel(StubCameraProvider([offline, TestCameras.garden]))
+
+        await viewModel.load()
+
+        #expect(viewModel.cameras.map(\.id) == ["garden", "front-door"])
     }
 
     @Test func respectsDisabledAutoOpen() async {

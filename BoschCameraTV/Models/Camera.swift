@@ -11,12 +11,16 @@ struct Camera: Identifiable, Hashable, Codable, Sendable {
     var name: String
     var streamURL: URL?
     var enabled: Bool
+    /// Laut Datenquelle erreichbar (Home Assistant: nicht „unavailable“/offline).
+    /// Wird nicht in der Konfigurationsdatei gespeichert.
+    var isAvailable: Bool
 
-    init(id: String, name: String, streamURL: URL?, enabled: Bool = true) {
+    init(id: String, name: String, streamURL: URL?, enabled: Bool = true, isAvailable: Bool = true) {
         self.id = id
         self.name = name
         self.streamURL = streamURL
         self.enabled = enabled
+        self.isAvailable = isAvailable
     }
 
     static let homeAssistantEntityPrefix = "camera."
@@ -43,6 +47,7 @@ struct Camera: Identifiable, Hashable, Codable, Sendable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         streamURL = urlString.flatMap { $0.isEmpty ? nil : URL(string: $0) }
         enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+        isAvailable = true
     }
 
     func encode(to encoder: any Encoder) throws {

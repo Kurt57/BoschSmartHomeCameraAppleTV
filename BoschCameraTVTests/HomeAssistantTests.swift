@@ -68,6 +68,20 @@ struct HomeAssistantMessagesTests {
         #expect(cameras.allSatisfy { $0.streamURL == nil && $0.isHomeAssistantEntity })
     }
 
+    @Test func detectsUnavailableCameras() throws {
+        let json = """
+        [
+          {"entity_id": "camera.a", "state": "idle", "attributes": {"friendly_name": "A", "supported_features": 2}},
+          {"entity_id": "camera.b", "state": "unavailable", "attributes": {"friendly_name": "B"}},
+          {"entity_id": "camera.c", "state": "idle", "attributes": {"friendly_name": "C", "supported_features": 0}},
+          {"entity_id": "camera.d", "state": "streaming", "attributes": {"friendly_name": "D"}}
+        ]
+        """
+        let cameras = try HomeAssistantMessages.cameras(fromStatesJSON: Data(json.utf8))
+
+        #expect(cameras.map(\.isAvailable) == [true, false, false, true])
+    }
+
     @Test func rejectsInvalidStatesJSON() {
         #expect(throws: HomeAssistantError.invalidResponse) {
             _ = try HomeAssistantMessages.cameras(fromStatesJSON: Data("{}".utf8))

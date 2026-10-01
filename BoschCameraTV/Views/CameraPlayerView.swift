@@ -8,7 +8,6 @@ import SwiftUI
 /// - Menü-/Zurück-Taste: zurück zur Kameraauswahl
 struct CameraPlayerView: View {
     @State private var viewModel: PlayerViewModel
-    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dismiss) private var dismiss
     @FocusState private var focusedTarget: FocusTarget?
 
@@ -44,16 +43,6 @@ struct CameraPlayerView: View {
         .onDisappear { viewModel.onDisappear() }
         .onChange(of: viewModel.isShowingFailure) { _, isShowingFailure in
             focusedTarget = isShowingFailure ? .retry : .video
-        }
-        .onChange(of: scenePhase) { _, phase in
-            switch phase {
-            case .background:
-                viewModel.didEnterBackground()
-            case .active:
-                viewModel.didBecomeActive()
-            default:
-                break
-            }
         }
     }
 

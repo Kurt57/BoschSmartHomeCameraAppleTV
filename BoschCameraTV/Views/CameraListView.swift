@@ -3,25 +3,28 @@ import SwiftUI
 /// Home-Screen „Meine Kameras“ – für die Bedienung mit der Siri Remote aus 3 m Entfernung.
 struct CameraListView: View {
     let viewModel: CameraListViewModel
+    let streams: any StreamProviding
     let onSelect: (Camera) -> Void
     let onOpenSettings: () -> Void
 
-    private enum FocusTarget: Hashable {
-        case camera(Camera.ID)
-        case settings
-    }
-
-    @FocusState private var focusedTarget: FocusTarget?
-
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 60, alignment: .top), count: 3)
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 48) {
-            header
-            content
+        if case .loaded(let cameras) = viewModel.state, !cameras.isEmpty {
+            // Normalfall: randloser Live-Monitor ohne Kopfzeile.
+            LiveCameraGrid(
+                cameras: cameras,
+                streams: streams,
+                preferredCameraID: viewModel.preferredCameraID,
+                onSelect: onSelect,
+                onOpenSettings: onOpenSettings
+            )
+        } else {
+            VStack(alignment: .leading, spacing: 48) {
+                header
+                content
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(BackgroundGradient().ignoresSafeArea())
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(BackgroundGradient().ignoresSafeArea())
     }
 
     private var header: some View {
@@ -38,7 +41,6 @@ struct CameraListView: View {
             Button(action: onOpenSettings) {
                 Label("Einstellungen", systemImage: "gearshape")
             }
-            .focused($focusedTarget, equals: .settings)
         }
         // Eigene Fokus-Sektion: „nach oben“ erreicht den Button von jeder Kachel aus.
         .focusSection()
@@ -67,30 +69,9 @@ struct CameraListView: View {
             } description: {
                 Text("Verbinde Home Assistant in den Einstellungen oder lege eine Datei „Cameras.json“ an (siehe README).")
             }
-        case .loaded(let cameras):
-            cameraGrid(cameras)
+        case .loaded:
+            EmptyView()
         }
-    }
-
-    private func cameraGrid(_ cameras: [Camera]) -> some View {
-        ScrollView {
-            LazyVGrid(columns: columns, alignment: .leading, spacing: 70) {
-                ForEach(cameras) { camera in
-                    CameraTile(
-                        camera: camera,
-                        isLastUsed: camera.id == viewModel.lastCameraID
-                    ) {
-                        onSelect(camera)
-                    }
-                    .focused($focusedTarget, equals: .camera(camera.id))
-                }
-            }
-            // Platz für den Fokus-Effekt (Anheben/Vergrößern) der Kacheln.
-            .padding(.vertical, 40)
-        }
-        .scrollClipDisabled()
-        .focusSection()
-        .defaultFocus($focusedTarget, viewModel.preferredCameraID.map(FocusTarget.camera))
     }
 }
 
@@ -112,6 +93,11 @@ private struct BackgroundGradient: View {
         cameraService: CameraService(provider: provider, settings: settings),
         settings: settings
     )
-    return CameraListView(viewModel: viewModel, onSelect: { _ in }, onOpenSettings: {})
+    return CameraListView(
+        viewModel: viewModel,
+        streams: StreamPlayerPool { StreamPlayer() },
+        onSelect: { _ in },
+        onOpenSettings: {}
+    )
         .task { await viewModel.load() }
 }

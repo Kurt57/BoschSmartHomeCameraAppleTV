@@ -14,6 +14,7 @@ struct RootView: View {
     @State private var path: [Route] = []
     @State private var listViewModel: CameraListViewModel
     @State private var hasHandledLaunch = false
+    @Environment(\.scenePhase) private var scenePhase
 
     init(dependencies: AppDependencies) {
         self.dependencies = dependencies
@@ -27,6 +28,7 @@ struct RootView: View {
         NavigationStack(path: $path) {
             CameraListView(
                 viewModel: listViewModel,
+                streams: dependencies.streamPool,
                 onSelect: openCamera,
                 onOpenSettings: { path.append(.settings) }
             )
@@ -41,6 +43,19 @@ struct RootView: View {
                 Task { await listViewModel.load() }
             }
         }
+        .onChange(of: scenePhase) { _, phase in
+            switch phase {
+            case .background:
+                // Alle Streams beenden: Netzwerk, Kamera-Sessions und Decoder frei.
+                dependencies.streamPool.suspendAll()
+            case .active:
+                dependencies.streamPool.resumeAll()
+                // Verfügbarkeit der Kameras kann sich geändert haben.
+                Task { await listViewModel.load() }
+            default:
+                break
+            }
+        }
     }
 
     @ViewBuilder
@@ -49,7 +64,7 @@ struct RootView: View {
         case .camera(let camera):
             CameraPlayerView(viewModel: PlayerViewModel(
                 camera: camera,
-                streamPlayer: dependencies.streamPlayer
+                streams: dependencies.streamPool
             ))
         case .settings:
             SettingsView(viewModel: SettingsViewModel(

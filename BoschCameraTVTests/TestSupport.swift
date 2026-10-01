@@ -183,3 +183,26 @@ enum TestHomeAssistant {
         return HomeAssistantConfigurationProvider(settings: settings, tokens: InMemoryTokenStore(token: token))
     }
 }
+
+/// Pool-Ersatz mit genau einem Fake-Player; protokolliert Anforderungen.
+@MainActor
+final class FakeStreams: StreamProviding {
+    let streamPlayer = FakeStreamPlayer()
+    private(set) var acquired: [Camera.ID] = []
+    private(set) var released: [Camera.ID] = []
+
+    func player(for camera: Camera) -> any StreamPlaying {
+        streamPlayer
+    }
+
+    func acquire(_ camera: Camera) {
+        acquired.append(camera.id)
+        if streamPlayer.state == .idle {
+            streamPlayer.start(camera)
+        }
+    }
+
+    func release(_ camera: Camera) {
+        released.append(camera.id)
+    }
+}

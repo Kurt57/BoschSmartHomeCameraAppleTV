@@ -30,6 +30,7 @@ final class StreamPlayer: StreamPlaying {
     private let loadTimeout: TimeInterval
     private let stallTimeout: TimeInterval
     private let resumeInPlaceLimit: TimeInterval
+    private let targetLiveOffset: TimeInterval
     private let sleeper: @Sendable (TimeInterval) async throws -> Void
 
     @ObservationIgnored private var generation = 0
@@ -44,6 +45,7 @@ final class StreamPlayer: StreamPlaying {
     ///   - loadTimeout: Maximale Zeit vom Laden des Items bis zum ersten Bild.
     ///   - stallTimeout: Maximale Pufferzeit während laufender Wiedergabe.
     ///   - resumeInPlaceLimit: Nach längerer Pause wird der Stream neu aufgebaut statt fortgesetzt.
+    ///   - targetLiveOffset: Angestrebter Abstand zum Live-Rand in Sekunden (Latenz).
     ///   - sleeper: Injizierbares Warten (Backoff, Watchdog) – in Tests sofort.
     init(
         player: AVPlayer = AVPlayer(),
@@ -53,6 +55,7 @@ final class StreamPlayer: StreamPlaying {
         loadTimeout: TimeInterval = 30,
         stallTimeout: TimeInterval = 15,
         resumeInPlaceLimit: TimeInterval = 30,
+        targetLiveOffset: TimeInterval = 3,
         sleeper: @escaping @Sendable (TimeInterval) async throws -> Void = { seconds in
             try await Task.sleep(for: .seconds(seconds))
         }
@@ -64,6 +67,7 @@ final class StreamPlayer: StreamPlaying {
         self.loadTimeout = loadTimeout
         self.stallTimeout = stallTimeout
         self.resumeInPlaceLimit = resumeInPlaceLimit
+        self.targetLiveOffset = targetLiveOffset
         self.sleeper = sleeper
 
         player.automaticallyWaitsToMinimizeStalling = true
@@ -166,7 +170,10 @@ final class StreamPlayer: StreamPlaying {
 
     private func attachItem(for url: URL) {
         let item = AVPlayerItem(url: url)
-        // Nach einem Puffern wieder zum ursprünglichen Abstand zum Live-Rand springen.
+        // Möglichst nah am Live-Rand starten (Standard wären mehrere Segmentlängen,
+        // bei Home Assistant leicht 10 s und mehr) und diesen Abstand nach einem
+        // Puffern wiederherstellen.
+        item.configuredTimeOffsetFromLive = CMTime(seconds: targetLiveOffset, preferredTimescale: 1000)
         item.automaticallyPreservesTimeOffsetFromLive = true
         observe(item)
         loadingStage = .buffering

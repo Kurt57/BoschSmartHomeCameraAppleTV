@@ -10,8 +10,9 @@ Keine externen Abhängigkeiten, nur Apple-Frameworks.
 
 ## Funktionsumfang
 
-- Startseite „Meine Kameras“ mit großen, fokussierbaren Kacheln (10-foot UI, Dark Mode)
-- Die zuletzt genutzte Kamera öffnet sich beim Start direkt (abschaltbar)
+- Startseite als Sicherheits-Monitor: alle Kameras live, randlos, 2 × 2 pro Bildschirm, weitere scrollbar; nicht verfügbare Kameras stehen am Ende
+- Klick auf eine Kachel öffnet das Vollbild sofort, weil der laufende Stream übernommen wird (je Kamera ein wiederverwendeter Player)
+- Optional öffnet sich beim Start direkt die zuletzt genutzte Kamera im Vollbild
 - Vollbild-Livebild über `AVPlayer`/`AVPlayerLayer`, ohne Transportleiste
 - Play/Pause per Siri Remote. Nach einer Pause geht es am Live-Rand weiter.
 - Automatischer Reconnect mit exponentiellem Backoff bei temporären Fehlern
@@ -118,12 +119,25 @@ AVPlayer spielt **HLS** über http(s). RTSP wird nicht unterstützt. Die Kamera 
 
 Unverschlüsseltes `http://` ist für lokale Adressen (`*.local`, IP-Adressen, Hostnamen ohne Domain) und für AVFoundation-Medien freigegeben (`Config/Info.plist`). Für Zugriffe von außen solltest du `https://` verwenden.
 
+## Verzögerung (Latenz)
+
+HLS über Home Assistant liegt mit Standardeinstellungen bei etwa 8–15 Sekunden hinter Echtzeit. Die App startet bereits nah am Live-Rand (Ziel: 3 s Abstand). Den größten Hebel hat Home Assistant selbst, über kürzere Segmente in der `configuration.yaml`:
+
+```yaml
+stream:
+  ll_hls: true
+  segment_duration: 2
+  part_duration: 0.5
+```
+
+Danach Home Assistant neu starten. Kürzere Segmente bedeuten etwas mehr Last auf dem Server. Das schnellere WebRTC der Lovelace-Karte kann der Apple-TV-Player nicht nutzen.
+
 ## Bedienung (Siri Remote)
 
 | Taste | Kameraauswahl | Livebild |
 |---|---|---|
-| Touchpad wischen | Fokus bewegen | Kameraname und Status kurz einblenden |
-| Touchpad klicken | Kamera öffnen | Pause/Fortsetzen (im Fehlerfall: erneut versuchen) |
+| Touchpad wischen | Fokus bewegen (nach oben: Einstellungen) | Kameraname und Status kurz einblenden |
+| Touchpad klicken | Kamera im Vollbild öffnen | Pause/Fortsetzen (im Fehlerfall: erneut versuchen) |
 | Play/Pause | – | Pause/Fortsetzen (im Fehlerfall: erneut versuchen) |
 | Menü/Zurück | App verlassen | Zurück zur Kameraauswahl |
 

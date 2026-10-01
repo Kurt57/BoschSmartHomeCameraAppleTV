@@ -84,12 +84,12 @@ struct SettingsViewModelTests {
     }
 
     @Test func persistsAutoOpenSetting() {
-        #expect(viewModel.autoOpenLastCamera)
-
-        viewModel.setAutoOpenLastCamera(false)
-
         #expect(!viewModel.autoOpenLastCamera)
-        #expect(!settings.autoOpenLastCamera)
+
+        viewModel.setAutoOpenLastCamera(true)
+
+        #expect(viewModel.autoOpenLastCamera)
+        #expect(settings.autoOpenLastCamera)
     }
 
     // MARK: Home Assistant

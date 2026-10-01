@@ -10,12 +10,12 @@ struct SettingsStoreTests {
         store = SettingsStore(defaults: isolated.defaults)
     }
 
-    @Test func opensLastCameraByDefault() {
-        #expect(store.autoOpenLastCamera)
-
-        store.autoOpenLastCamera = false
-
+    @Test func showsOverviewByDefault() {
         #expect(!store.autoOpenLastCamera)
+
+        store.autoOpenLastCamera = true
+
+        #expect(store.autoOpenLastCamera)
     }
 
     @Test func remembersLastCamera() {

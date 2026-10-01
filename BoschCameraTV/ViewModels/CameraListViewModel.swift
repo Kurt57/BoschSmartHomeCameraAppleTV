@@ -45,7 +45,8 @@ final class CameraListViewModel {
         do {
             let cameras = try await cameraService.cameras()
             Log.cameras.info("\(cameras.count) Kamera(s) geladen")
-            state = .loaded(cameras)
+            // Verfügbare Kameras zuerst – nicht verfügbare belegen keinen Platz oben.
+            state = .loaded(cameras.filter(\.isAvailable) + cameras.filter { !$0.isAvailable })
         } catch {
             Log.cameras.error("Kameras konnten nicht geladen werden: \(error.localizedDescription, privacy: .public)")
             state = .failed(message: error.localizedDescription)

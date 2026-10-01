@@ -8,9 +8,11 @@ enum HomeAssistantMessages {
     private struct EntityState: Decodable {
         struct Attributes: Decodable {
             let friendlyName: String?
+            let supportedFeatures: Int?
 
             private enum CodingKeys: String, CodingKey {
                 case friendlyName = "friendly_name"
+                case supportedFeatures = "supported_features"
             }
         }
 
@@ -25,8 +27,14 @@ enum HomeAssistantMessages {
         }
     }
 
+    /// `CameraEntityFeature.STREAM` in Home Assistant.
+    private static let streamFeature = 2
+
     /// Alle `camera.*`-Entitäten als Kameras, alphabetisch nach Namen. Die Stream-URL
     /// bleibt leer – sie wird beim Abspielen per `camera/stream` angefordert.
+    ///
+    /// Nicht verfügbar ist eine Kamera, wenn ihr Status `unavailable`/`unknown` ist oder
+    /// sie kein Streaming anbietet (die Bosch-Integration nimmt das bei Offline-Kameras weg).
     static func cameras(fromStatesJSON data: Data) throws -> [Camera] {
         let states: [EntityState]
         do {
@@ -38,10 +46,13 @@ enum HomeAssistantMessages {
             .filter { $0.entityID.hasPrefix(Camera.homeAssistantEntityPrefix) }
             .map { state in
                 let name = state.attributes?.friendlyName?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let isOnline = state.state != "unavailable" && state.state != "unknown"
+                let canStream = state.attributes?.supportedFeatures.map { $0 & streamFeature != 0 } ?? true
                 return Camera(
                     id: state.entityID,
                     name: (name?.isEmpty == false ? name : nil) ?? state.entityID,
-                    streamURL: nil
+                    streamURL: nil,
+                    isAvailable: isOnline && canStream
                 )
             }
             .sorted { $0.name.lowercased() < $1.name.lowercased() }

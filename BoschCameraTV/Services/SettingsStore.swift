@@ -22,7 +22,7 @@ final class SettingsStore: @unchecked Sendable {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        defaults.register(defaults: [Key.autoOpenLastCamera: true])
+        defaults.register(defaults: [Key.autoOpenLastCamera: false])
     }
 
     /// ID der zuletzt geöffneten Kamera – wird beim Start fokussiert bzw. direkt geöffnet.
@@ -31,7 +31,8 @@ final class SettingsStore: @unchecked Sendable {
         set { defaults.set(newValue, forKey: Key.lastCameraID) }
     }
 
-    /// Öffnet beim App-Start direkt die zuletzt verwendete Kamera.
+    /// Öffnet beim App-Start direkt die zuletzt verwendete Kamera im Vollbild
+    /// (Standard: aus – die Startseite zeigt bereits alle Live-Bilder).
     var autoOpenLastCamera: Bool {
         get { defaults.bool(forKey: Key.autoOpenLastCamera) }
         set { defaults.set(newValue, forKey: Key.autoOpenLastCamera) }

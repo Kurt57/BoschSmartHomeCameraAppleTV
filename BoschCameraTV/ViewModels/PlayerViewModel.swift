@@ -1,10 +1,12 @@
 import AVFoundation
 import Observation
 
-/// ViewModel der Vollbild-Wiedergabe einer Kamera.
+/// ViewModel der Wiedergabe einer Kamera – als Kachel auf der Startseite (stumm)
+/// oder im Vollbild (mit Ton).
 ///
-/// Übersetzt den Zustand des (geteilten) `StreamPlaying` in eine schlanke Darstellung
-/// für das Overlay und kümmert sich um Fernbedienungs- und Lebenszyklus-Ereignisse.
+/// Übersetzt den Zustand des Kamera-Players in eine schlanke Darstellung für das
+/// Overlay und kümmert sich um Fernbedienungs- und Lebenszyklus-Ereignisse. Den
+/// Stream selbst hält der `StreamProviding`-Pool am Laufen.
 @MainActor
 @Observable
 final class PlayerViewModel {
@@ -25,14 +27,24 @@ final class PlayerViewModel {
     let camera: Camera
     private(set) var isInfoVisible = true
 
+    private let streams: any StreamProviding
     private let streamPlayer: any StreamPlaying
+    private let playsAudio: Bool
     private let infoDisplayDuration: Duration
     @ObservationIgnored private var infoTask: Task<Void, Never>?
-    @ObservationIgnored private var isSuspendedInBackground = false
+    @ObservationIgnored private var isActive = false
 
-    init(camera: Camera, streamPlayer: any StreamPlaying, infoDisplayDuration: Duration = .seconds(4)) {
+    /// - Parameter playsAudio: `true` im Vollbild; Kacheln der Startseite bleiben stumm.
+    init(
+        camera: Camera,
+        streams: any StreamProviding,
+        playsAudio: Bool = true,
+        infoDisplayDuration: Duration = .seconds(4)
+    ) {
         self.camera = camera
-        self.streamPlayer = streamPlayer
+        self.streams = streams
+        self.streamPlayer = streams.player(for: camera)
+        self.playsAudio = playsAudio
         self.infoDisplayDuration = infoDisplayDuration
     }
 
@@ -44,6 +56,23 @@ final class PlayerViewModel {
     /// gilt diese Ansicht als `idle`.
     var state: PlayerState {
         streamPlayer.currentCamera?.id == camera.id ? streamPlayer.state : .idle
+    }
+
+    /// Kurzer Status für Kacheln, z. B. „Verbinde…“; `nil` bei laufendem Bild.
+    var compactStatus: (text: String, systemImage: String?)? {
+        if !camera.isAvailable, state == .idle {
+            return ("Kamera nicht verfügbar", "video.slash")
+        }
+        switch overlay {
+        case .none:
+            return nil
+        case .paused:
+            return ("Pausiert", "pause.fill")
+        case .progress(let title, _):
+            return (title, nil)
+        case .failure(let title, _, let systemImage):
+            return (title, systemImage)
+        }
     }
 
     var isLive: Bool {
@@ -89,17 +118,28 @@ final class PlayerViewModel {
 
     // MARK: - Ereignisse aus der View
 
+    /// Ansicht sichtbar: Stream anfordern (läuft er schon, wird er sofort übernommen).
+    /// Kacheln nicht verfügbarer Kameras starten keinen Stream; im Vollbild wird es
+    /// trotzdem versucht.
     func onAppear() {
-        streamPlayer.start(camera)
+        guard !isActive, camera.isAvailable || playsAudio else { return }
+        isActive = true
+        streams.acquire(camera)
+        if playsAudio {
+            streamPlayer.player.isMuted = false
+        }
         showInfoTemporarily()
     }
 
+    /// Ansicht verschwunden: Stream freigeben; der Pool stoppt ihn verzögert.
     func onDisappear() {
+        guard isActive else { return }
+        isActive = false
         infoTask?.cancel()
-        // Nur stoppen, wenn der geteilte Player noch diese Kamera spielt.
-        if streamPlayer.currentCamera?.id == camera.id {
-            streamPlayer.stop()
+        if playsAudio {
+            streamPlayer.player.isMuted = true
         }
+        streams.release(camera)
     }
 
     /// Play/Pause-Taste bzw. Klick auf das Touchpad der Siri Remote.
@@ -120,21 +160,6 @@ final class PlayerViewModel {
     }
 
     func retry() {
-        streamPlayer.start(camera)
-        showInfoTemporarily()
-    }
-
-    /// App wechselt in den Hintergrund: Stream beenden, Netzwerk und Decoder freigeben.
-    func didEnterBackground() {
-        guard streamPlayer.currentCamera?.id == camera.id else { return }
-        isSuspendedInBackground = true
-        streamPlayer.stop()
-    }
-
-    /// App ist wieder aktiv: Stream automatisch neu aufbauen.
-    func didBecomeActive() {
-        guard isSuspendedInBackground else { return }
-        isSuspendedInBackground = false
         streamPlayer.start(camera)
         showInfoTemporarily()
     }

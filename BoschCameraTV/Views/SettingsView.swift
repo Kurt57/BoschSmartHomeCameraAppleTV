@@ -16,11 +16,11 @@ struct SettingsView: View {
             homeAssistantSection
 
             Section {
-                Toggle("Zuletzt genutzte Kamera beim Start öffnen", isOn: autoOpenBinding)
+                Toggle("Zuletzt genutzte Kamera beim Start im Vollbild öffnen", isOn: autoOpenBinding)
             } header: {
                 Text("Start")
             } footer: {
-                Text("Zeigt nach dem Start sofort das Livebild. Mit der Zurück-Taste gelangst du zur Kameraauswahl.")
+                Text("Standardmäßig zeigt die Startseite alle Kameras live. Mit dieser Option öffnet sich stattdessen direkt die zuletzt genutzte Kamera; die Zurück-Taste führt zur Übersicht.")
             }
 
             Section {

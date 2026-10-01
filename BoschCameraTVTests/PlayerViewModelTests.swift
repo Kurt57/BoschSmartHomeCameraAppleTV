@@ -4,57 +4,65 @@ import Testing
 
 @MainActor
 struct PlayerViewModelTests {
-    let streamPlayer = FakeStreamPlayer()
+    let streams = FakeStreams()
+    var streamPlayer: FakeStreamPlayer { streams.streamPlayer }
     let viewModel: PlayerViewModel
 
     init() {
-        viewModel = PlayerViewModel(camera: TestCameras.frontDoor, streamPlayer: streamPlayer)
+        viewModel = PlayerViewModel(camera: TestCameras.frontDoor, streams: streams)
     }
 
     // MARK: Lebenszyklus
 
-    @Test func startsStreamOnAppear() {
+    @Test func acquiresStreamAndUnmutesOnAppear() {
+        streamPlayer.player.isMuted = true
+
         viewModel.onAppear()
 
+        #expect(streams.acquired == ["front-door"])
         #expect(streamPlayer.calls == [.start("front-door")])
+        #expect(!streamPlayer.player.isMuted)
         #expect(viewModel.overlay == .progress(title: "Verbinde…", detail: nil))
         #expect(viewModel.isInfoVisible)
     }
 
-    @Test func stopsStreamOnDisappear() {
+    @Test func releasesAndMutesOnDisappear() {
         viewModel.onAppear()
 
         viewModel.onDisappear()
 
-        #expect(streamPlayer.calls == [.start("front-door"), .stop])
+        #expect(streams.released == ["front-door"])
+        #expect(streamPlayer.player.isMuted)
+        #expect(!streamPlayer.calls.contains(.stop))
     }
 
-    @Test func doesNotStopStreamOfAnotherCamera() {
-        streamPlayer.start(TestCameras.garden)
-
-        viewModel.onDisappear()
-
-        #expect(streamPlayer.calls == [.start("garden")])
-        #expect(viewModel.state == .idle)
-    }
-
-    @Test func stopsInBackgroundAndRestartsWhenActive() {
-        viewModel.onAppear()
+    @Test func takesOverRunningStreamWithoutRestart() {
+        streamPlayer.start(TestCameras.frontDoor)
         streamPlayer.state = .playing
 
-        viewModel.didEnterBackground()
-        #expect(streamPlayer.calls.last == .stop)
-
-        viewModel.didBecomeActive()
-        #expect(streamPlayer.calls == [.start("front-door"), .stop, .start("front-door")])
-    }
-
-    @Test func ignoresActivationWithoutPriorBackground() {
         viewModel.onAppear()
 
-        viewModel.didBecomeActive()
-
         #expect(streamPlayer.calls == [.start("front-door")])
+        #expect(viewModel.overlay == .none)
+    }
+
+    @Test func tileStaysMutedAndSkipsUnavailableCamera() {
+        var offline = TestCameras.frontDoor
+        offline.isAvailable = false
+        let tile = PlayerViewModel(camera: offline, streams: streams, playsAudio: false)
+        streamPlayer.player.isMuted = true
+
+        tile.onAppear()
+
+        #expect(streams.acquired.isEmpty)
+        #expect(streamPlayer.player.isMuted)
+        #expect(tile.compactStatus?.text == "Kamera nicht verfügbar")
+    }
+
+    @Test func showsIdleForOtherCamera() {
+        streamPlayer.start(TestCameras.garden)
+
+        #expect(viewModel.state == .idle)
     }
 
     // MARK: Fernbedienung
@@ -136,7 +144,7 @@ struct PlayerViewModelTests {
     @Test func hidesInfoAfterDelay() async {
         let viewModel = PlayerViewModel(
             camera: TestCameras.frontDoor,
-            streamPlayer: streamPlayer,
+            streams: streams,
             infoDisplayDuration: .milliseconds(20)
         )
 
