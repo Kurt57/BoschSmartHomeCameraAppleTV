@@ -59,12 +59,13 @@ struct CameraListView: View {
                 Button("Erneut laden") {
                     Task { await viewModel.load() }
                 }
+                Button("Einstellungen", action: onOpenSettings)
             }
         case .loaded(let cameras) where cameras.isEmpty:
             ContentUnavailableView {
                 Label("Keine Kameras konfiguriert", systemImage: "video.slash")
             } description: {
-                Text("Lege eine Datei „Cameras.json“ an (siehe README) oder aktiviere Kameras in der Konfiguration.")
+                Text("Verbinde Home Assistant in den Einstellungen oder lege eine Datei „Cameras.json“ an (siehe README).")
             }
         case .loaded(let cameras):
             cameraGrid(cameras)

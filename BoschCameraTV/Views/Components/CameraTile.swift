@@ -59,7 +59,7 @@ struct CameraTile: View {
     /// Tokens aus dem Pfad anzuzeigen.
     private var subtitle: String {
         guard let url = camera.streamURL, let host = url.host() else {
-            return "Keine Stream-URL konfiguriert"
+            return camera.isHomeAssistantEntity ? "Home Assistant · \(camera.id)" : "Keine Stream-URL konfiguriert"
         }
         if let port = url.port {
             return "\(host):\(port)"

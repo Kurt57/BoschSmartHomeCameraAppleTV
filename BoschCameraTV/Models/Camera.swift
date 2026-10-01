@@ -19,6 +19,13 @@ struct Camera: Identifiable, Hashable, Codable, Sendable {
         self.enabled = enabled
     }
 
+    static let homeAssistantEntityPrefix = "camera."
+
+    /// Kamera aus Home Assistant (`camera.*`-Entität) – ihre Stream-URL wird dort angefordert.
+    var isHomeAssistantEntity: Bool {
+        id.hasPrefix(Self.homeAssistantEntityPrefix)
+    }
+
     private enum CodingKeys: String, CodingKey {
         case id, name, streamURL, enabled
     }

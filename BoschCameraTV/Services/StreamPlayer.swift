@@ -50,7 +50,7 @@ final class StreamPlayer: StreamPlaying {
         resolver: any StreamURLResolving = DirectStreamURLResolver(),
         probe: any StreamProbing = HTTPStreamProbe(),
         retryPolicy: RetryPolicy = .default,
-        loadTimeout: TimeInterval = 20,
+        loadTimeout: TimeInterval = 30,
         stallTimeout: TimeInterval = 15,
         resumeInPlaceLimit: TimeInterval = 30,
         sleeper: @escaping @Sendable (TimeInterval) async throws -> Void = { seconds in

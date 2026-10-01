@@ -55,7 +55,9 @@ struct RootView: View {
             SettingsView(viewModel: SettingsViewModel(
                 cameraService: dependencies.cameraService,
                 settings: dependencies.settings,
-                configurationSummary: dependencies.configurationSummary
+                homeAssistant: dependencies.homeAssistant,
+                api: dependencies.homeAssistantAPI,
+                localConfigurationSummary: dependencies.localConfigurationSummary
             ))
         }
     }

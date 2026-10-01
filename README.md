@@ -8,7 +8,7 @@ Bosch Eyes Outdoor II ──▶ Home Assistant ──▶ HLS-Stream (.m3u8) ─�
 
 Keine externen Abhängigkeiten, nur Apple-Frameworks.
 
-## Funktionsumfang (Phase 1 – MVP)
+## Funktionsumfang
 
 - Startseite „Meine Kameras“ mit großen, fokussierbaren Kacheln (10-foot UI, Dark Mode)
 - Die zuletzt genutzte Kamera öffnet sich beim Start direkt (abschaltbar)
@@ -19,7 +19,7 @@ Keine externen Abhängigkeiten, nur Apple-Frameworks.
 - Wechsel in den Hintergrund: Der Stream wird beendet und bei Rückkehr automatisch neu gestartet.
 - Kameras kommen aus einer lokalen JSON-Datei. Stream-URLs lassen sich in der App überschreiben (UserDefaults).
 - Logging über OSLog
-- Die Architektur ist für die spätere Home-Assistant-Anbindung vorbereitet (`CameraProvider`, `StreamURLResolving`, Keychain).
+- Home-Assistant-Anbindung: Kameras automatisch aus Home Assistant, frische Stream-Adresse je Verbindung, Token in der Keychain
 
 ## Voraussetzungen
 
@@ -57,7 +57,21 @@ xcodebuild test -project BoschCameraTV.xcodeproj -scheme BoschCameraTV \
 
 ## Kameras konfigurieren
 
-### A) `Cameras.json` (empfohlen)
+### Home Assistant verbinden (empfohlen)
+
+1. In Home Assistant ein Token anlegen: *Profil → Sicherheit → Langlebige Zugangs-Tokens*.
+2. In der App: *Meine Kameras → Einstellungen → Home Assistant*.
+   - **Server** eintragen, z. B. `192.168.1.10:8123`. `http://` wird ergänzt. Die IP-Adresse ist am zuverlässigsten.
+   - **Token** einfügen. Am einfachsten über die Mitteilung „Apple TV-Tastatur“ auf dem iPhone.
+3. **Verbindung testen.** Die App meldet, wie viele Kameras sie gefunden hat.
+
+Danach zeigt die App alle `camera.*`-Entitäten, z. B. die der [Bosch-Smart-Home-Camera-Integration](https://github.com/mosandlt/Bosch-Smart-Home-Camera-Tool-HomeAssistant) (`camera.bosch_<name>`). Vor jedem Verbindungsaufbau fordert sie per WebSocket-Befehl `camera/stream` eine frische HLS-Adresse an. Deshalb stören abgelaufene Stream-Tokens nicht.
+
+- Das Token liegt nur in der Keychain, die Server-Adresse in `UserDefaults`.
+- „Home Assistant trennen“ schaltet zurück auf `Cameras.json`.
+- Der erste Verbindungsaufbau kann 10–20 Sekunden dauern, weil die Bosch-Integration erst die Kamera-Session öffnet. HLS über Home Assistant hat zudem einige Sekunden Verzögerung.
+
+### A) `Cameras.json` (ohne Home Assistant)
 
 ```sh
 cp BoschCameraTV/Resources/Cameras.example.json BoschCameraTV/Resources/Cameras.json
@@ -83,9 +97,9 @@ cp BoschCameraTV/Resources/Cameras.example.json BoschCameraTV/Resources/Cameras.
 | `streamURL` | nein | HLS-URL (http/https). Leer heißt „nicht konfiguriert“. |
 | `enabled` | nein | `false` blendet die Kamera aus (Standard: `true`) |
 
-### B) In der App
+### B) Stream-URL je Kamera überschreiben
 
-*Meine Kameras → Einstellungen → Stream-URLs*: Eine URL pro Kamera überschreibt den Wert aus der Datei. Sie wird nur lokal in `UserDefaults` gespeichert. Ein leeres Feld setzt auf den Dateiwert zurück. Statt der Bildschirmtastatur kannst du auch ein iPhone im selben Netz zur Eingabe nutzen.
+*Meine Kameras → Einstellungen → Stream-URLs*: Eine URL pro Kamera überschreibt den Wert aus der Datei bzw. die automatisch von Home Assistant geholte Adresse, z. B. für einen go2rtc-Stream. Sie wird nur lokal in `UserDefaults` gespeichert. Ein leeres Feld setzt auf den Dateiwert zurück. Statt der Bildschirmtastatur kannst du auch ein iPhone im selben Netz zur Eingabe nutzen.
 
 ### C) Launch-Argument (Entwicklung)
 
@@ -100,7 +114,7 @@ AVPlayer spielt **HLS** über http(s). RTSP wird nicht unterstützt. Die Kamera 
 | Quelle | Beispiel-URL | Hinweis |
 |---|---|---|
 | go2rtc (z. B. als Add-on) | `http://<host>:1984/api/stream.m3u8?src=<stream>` | Statische URL, für Phase 1 am einfachsten. Details stehen in der go2rtc-Dokumentation. |
-| Stream-Integration von Home Assistant | `http://<ha>:8123/api/hls/<token>/master_playlist.m3u8` | Das Token vergibt Home Assistant per WebSocket-Befehl `camera/stream`. Es verfällt, sobald der Stream eine Weile ungenutzt ist. Phase 2 holt es automatisch (siehe Roadmap). |
+| Stream-Integration von Home Assistant | `http://<ha>:8123/api/hls/<token>/master_playlist.m3u8` | Das Token vergibt Home Assistant per WebSocket-Befehl `camera/stream`. Es verfällt, sobald der Stream eine Weile ungenutzt ist. Mit verbundenem Home Assistant holt die App es automatisch. |
 
 Unverschlüsseltes `http://` ist für lokale Adressen (`*.local`, IP-Adressen, Hostnamen ohne Domain) und für AVFoundation-Medien freigegeben (`Config/Info.plist`). Für Zugriffe von außen solltest du `https://` verwenden.
 
@@ -125,7 +139,7 @@ Unverschlüsseltes `http://` ist für lokale Adressen (`*.local`, IP-Adressen, H
 | Zugriff verweigert / Keine bzw. ungültige Stream-URL | Konfigurationsfehler. Hier gibt es keinen automatischen Reconnect. |
 
 - **Reconnect:** Temporäre Fehler werden mit Backoff 1 s, 2 s, 4 s, 8 s, 16 s, 30 s, 30 s, 30 s (±20 % Jitter) wiederholt. Danach erscheint der Fehler mit „Erneut versuchen“.
-- **Watchdog:** Kommt 20 s nach dem Laden kein Bild oder puffert die Wiedergabe länger als 15 s, wird der Stream neu aufgebaut.
+- **Watchdog:** Kommt 30 s nach dem Laden kein Bild oder puffert die Wiedergabe länger als 15 s, wird der Stream neu aufgebaut.
 - **Pause:** Nach dem Fortsetzen springt die Wiedergabe zum Live-Rand. Nach mehr als 30 s Pause wird der Stream neu aufgebaut.
 - **Hintergrund:** Der Stream wird vollständig beendet (Netzwerk und Decoder frei). Bei Rückkehr startet er automatisch neu.
 
@@ -146,14 +160,14 @@ BoschCameraTV/
 │   ├── CameraProvider.swift        protocol CameraProvider { func cameras() async throws -> [Camera] }
 │   ├── LocalCameraProvider.swift   Cameras.json → [Camera]
 │   ├── CameraService.swift         Fassade: aktiv-Filter, Duplikate, URL-Overrides
-│   ├── StreamURLResolver.swift     Stream-URL je Kamera (Phase 2: Home Assistant)
+│   ├── StreamURLResolver.swift     Stream-URL je Kamera (direkt)
 │   ├── StreamProbe.swift           HTTP-Vorabprüfung → präzise Fehlermeldungen
 │   ├── StreamPlaying.swift         Player-Protokoll (für Tests)
 │   ├── StreamPlayer.swift          AVPlayer, Reconnect/Backoff, Watchdog, Aufräumen
 │   ├── RetryPolicy.swift           Exponentielles Backoff mit Jitter
 │   ├── SettingsStore.swift         UserDefaults (keine Geheimnisse!)
 │   ├── KeychainStore.swift         Keychain-Wrapper für Geheimnisse
-│   └── HomeAssistant/              Vorbereitung Phase 2 (Token in der Keychain)
+│   └── HomeAssistant/              Client (REST + WebSocket), Provider, Resolver, Token in der Keychain
 ├── ViewModels/                     CameraList-, Player-, SettingsViewModel
 ├── Views/                          RootView, CameraListView, CameraPlayerView, SettingsView
 │   └── Components/                 VideoSurfaceView (AVPlayerLayer), Kacheln, Overlays
@@ -182,7 +196,7 @@ OSLog mit dem Bundle-Identifier als Subsystem und den Kategorien `App`, `Cameras
 ## Sicherheit
 
 - Keine Zugangsdaten oder echten Adressen im Quellcode. `Cameras.json` und `Config/Local.xcconfig` stehen in `.gitignore`.
-- Ein Home-Assistant-Token gehört ausschließlich in die Keychain. `KeychainStore` und `HomeAssistantCredentialStore` sind dafür vorbereitet und getestet.
+- Das Home-Assistant-Token liegt ausschließlich in der Keychain (`HomeAssistantCredentialStore`). Es wird nie angezeigt und nie geloggt.
 - Stream-URL-Overrides liegen in `UserDefaults`. Das ist ein bewusster MVP-Kompromiss: HLS-Stream-Tokens sind kurzlebig, ein Long-Lived Access Token darf dort nie landen.
 - ATS bleibt aktiv. Ausnahmen gelten nur für lokale Netze und AVFoundation-Medien.
 
@@ -191,17 +205,16 @@ OSLog mit dem Bundle-Identifier als Subsystem und den Kategorien `App`, `Cameras
 Unit-Tests mit Swift Testing (`BoschCameraTVTests/`):
 
 - Modelle: JSON-Decoding und Defaults, URL-Validierung, Fehlerklassifizierung (auch in AVFoundation verpackte Netzwerkfehler)
+- Home Assistant: Adress-Normalisierung, Auswertung von `/api/states` und WebSocket-Nachrichten, Quellenwahl (Home Assistant oder Datei), frische Stream-URL je Verbindungsversuch, Einstellungen (Server, Token, Verbindungstest)
 - Services: `LocalCameraProvider`, `CameraService` (Filter, Duplikate, Overrides), `SettingsStore`, `RetryPolicy`, Status-Auswertung der Vorabprüfung, Keychain
 - `StreamPlayer`: fehlende oder ungültige URL, keine Retries bei permanenten Fehlern, Backoff-Reconnects bis `failed`, Abbruch per `stop()`, Retry, Übergang in die Pufferphase. Vorabprüfung und Wartezeiten sind dabei ersetzt, es wird kein Netzwerk benötigt.
 - ViewModels: Overlay-Texte je Zustand, Play/Pause, Hintergrund/Vordergrund, Auto-Open und Fokus der zuletzt genutzten Kamera, Validierung in den Einstellungen
 
 GitHub Actions (`.github/workflows/ci.yml`) baut das Projekt bei jedem Push mit Xcode auf macOS und führt die Tests auf einem Apple-TV-Simulator aus.
 
-## Roadmap: Phase 2 – Home Assistant
+## Mögliche nächste Schritte
 
-1. Einstellungen um Server-URL (UserDefaults) und Long-Lived Access Token (`HomeAssistantCredentialStore` → Keychain) erweitern.
-2. `HomeAssistantCameraProvider: CameraProvider` anlegen. Er liest `GET /api/states` mit `Authorization: Bearer <token>` und bildet `camera.*`-Entities ab (`id` = entity_id, `name` = friendly_name).
-3. `HomeAssistantStreamURLResolver: StreamURLResolving` anlegen. Er fordert vor jedem (Re-)Connect per WebSocket-Befehl `camera/stream` eine frische HLS-URL an. Der Player ruft den Resolver bei jedem Reconnect automatisch auf.
-4. In `AppDependencies.live()` die beiden Implementierungen einsetzen. Views und ViewModels bleiben unverändert.
-
-Mögliche weitere Schritte: Vorschaubilder (`/api/camera_proxy/<entity>`), Kamerawechsel per Links/Rechts im Vollbild, Top-Shelf-Extension mit Schnappschüssen.
+- Vorschaubilder der Kameras (`/api/camera_proxy/<entity>`)
+- Kamerawechsel per Links/Rechts im Vollbild
+- Schalter der Bosch-Integration aus der App bedienen, z. B. Licht oder Privatsphäre-Modus (`/api/services/...`)
+- Top-Shelf-Extension mit Schnappschüssen

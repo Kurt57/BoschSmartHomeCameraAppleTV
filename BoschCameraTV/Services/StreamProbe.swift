@@ -21,7 +21,7 @@ protocol StreamProbing: Sendable {
 struct HTTPStreamProbe: StreamProbing {
     private let session: URLSession
 
-    init(timeout: TimeInterval = 5) {
+    init(timeout: TimeInterval = 15) {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = timeout
         configuration.timeoutIntervalForResource = timeout * 2

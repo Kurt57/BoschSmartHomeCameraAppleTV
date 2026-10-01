@@ -2,7 +2,8 @@ import Foundation
 import Observation
 import OSLog
 
-/// ViewModel der Einstellungen: Start-Verhalten und Stream-URL-Overrides je Kamera.
+/// ViewModel der Einstellungen: Home-Assistant-Verbindung, Start-Verhalten und
+/// Stream-URL-Overrides je Kamera.
 @MainActor
 @Observable
 final class SettingsViewModel {
@@ -12,26 +13,66 @@ final class SettingsViewModel {
         let isEnabled: Bool
         /// URL aus der Konfigurationsdatei – dient als Platzhalter im Eingabefeld.
         let configuredURL: URL?
+        let isHomeAssistantEntity: Bool
         var overrideText: String
         var validationMessage: String?
     }
 
+    enum ConnectionStatus: Equatable {
+        case unknown
+        case testing
+        case connected(cameraCount: Int)
+        case failed(String)
+    }
+
     static let invalidURLMessage = "Ungültige URL – erwartet wird http:// oder https:// (HLS, .m3u8)."
+    static let invalidServerURLMessage = "Ungültige Adresse – z. B. http://192.168.1.10:8123"
 
     private(set) var entries: [Entry] = []
     private(set) var autoOpenLastCamera: Bool
     private(set) var loadErrorMessage: String?
-    /// Beschreibung der aktiven Datenquelle, z. B. „Cameras.json“.
-    let configurationSummary: String
+
+    private(set) var serverURLText: String
+    private(set) var serverURLValidationMessage: String?
+    private(set) var hasStoredToken: Bool
+    private(set) var tokenErrorMessage: String?
+    private(set) var connectionStatus: ConnectionStatus = .unknown
+    /// Wird bei jeder Änderung der Verbindung erhöht – die View lädt dann neu.
+    private(set) var configurationRevision = 0
 
     private let cameraService: CameraService
     private let settings: SettingsStore
+    private let homeAssistant: HomeAssistantConfigurationProvider
+    private let api: any HomeAssistantAPI
+    private let localConfigurationSummary: String
 
-    init(cameraService: CameraService, settings: SettingsStore, configurationSummary: String) {
+    init(
+        cameraService: CameraService,
+        settings: SettingsStore,
+        homeAssistant: HomeAssistantConfigurationProvider,
+        api: any HomeAssistantAPI,
+        localConfigurationSummary: String
+    ) {
         self.cameraService = cameraService
         self.settings = settings
-        self.configurationSummary = configurationSummary
+        self.homeAssistant = homeAssistant
+        self.api = api
+        self.localConfigurationSummary = localConfigurationSummary
         autoOpenLastCamera = settings.autoOpenLastCamera
+        serverURLText = settings.homeAssistantServerURL?.absoluteString ?? ""
+        hasStoredToken = homeAssistant.hasStoredToken
+    }
+
+    var isHomeAssistantConfigured: Bool {
+        homeAssistant.current() != nil
+    }
+
+    /// Aktive Datenquelle, z. B. „Home Assistant (192.168.1.10)“ oder „Cameras.json“.
+    var configurationSummary: String {
+        if let current = homeAssistant.current() {
+            return "Home Assistant (\(current.serverURL.host() ?? current.serverURL.absoluteString))"
+        }
+        return localConfigurationSummary
     }
 
     func load() async {
@@ -44,6 +85,7 @@ final class SettingsViewModel {
                     name: camera.name,
                     isEnabled: camera.enabled,
                     configuredURL: camera.streamURL,
+                    isHomeAssistantEntity: camera.isHomeAssistantEntity,
                     overrideText: overrides[camera.id]?.absoluteString ?? "",
                     validationMessage: nil
                 )
@@ -54,6 +96,75 @@ final class SettingsViewModel {
             loadErrorMessage = error.localizedDescription
         }
     }
+
+    // MARK: Home Assistant
+
+    func updateServerURL(_ text: String) {
+        serverURLText = text
+        if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            settings.homeAssistantServerURL = nil
+            serverURLValidationMessage = nil
+            connectionDidChange()
+            return
+        }
+        guard let url = HomeAssistantConfiguration.serverURL(from: text) else {
+            serverURLValidationMessage = Self.invalidServerURLMessage
+            return
+        }
+        settings.homeAssistantServerURL = url
+        serverURLText = url.absoluteString
+        serverURLValidationMessage = nil
+        Log.settings.info("Home-Assistant-Server gespeichert")
+        connectionDidChange()
+    }
+
+    /// Speichert ein neues Token in der Keychain. Leere Eingaben ändern nichts.
+    func saveToken(_ text: String) {
+        let token = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !token.isEmpty else { return }
+        do {
+            try homeAssistant.tokens.setAccessToken(token)
+            hasStoredToken = true
+            tokenErrorMessage = nil
+            Log.settings.info("Home-Assistant-Token in der Keychain gespeichert")
+            connectionDidChange()
+        } catch {
+            tokenErrorMessage = "Das Token konnte nicht gespeichert werden."
+            Log.settings.error("Token speichern fehlgeschlagen: \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    /// Entfernt Server-Adresse und Token – die App nutzt dann wieder `Cameras.json`.
+    func disconnectHomeAssistant() {
+        settings.homeAssistantServerURL = nil
+        try? homeAssistant.tokens.removeAccessToken()
+        serverURLText = ""
+        serverURLValidationMessage = nil
+        hasStoredToken = false
+        Log.settings.info("Home-Assistant-Verbindung entfernt")
+        connectionDidChange()
+    }
+
+    func testConnection() async {
+        guard let current = homeAssistant.current() else {
+            connectionStatus = .failed(HomeAssistantError.notConfigured.localizedDescription)
+            return
+        }
+        connectionStatus = .testing
+        do {
+            let cameras = try await api.cameras(configuration: current)
+            connectionStatus = .connected(cameraCount: cameras.count)
+        } catch {
+            connectionStatus = .failed(error.localizedDescription)
+        }
+    }
+
+    private func connectionDidChange() {
+        connectionStatus = .unknown
+        configurationRevision += 1
+    }
+
+    // MARK: Start & Overrides
 
     func setAutoOpenLastCamera(_ isOn: Bool) {
         autoOpenLastCamera = isOn

@@ -15,6 +15,7 @@ final class SettingsStore: @unchecked Sendable {
         static let lastCameraID = "lastCameraID"
         static let autoOpenLastCamera = "autoOpenLastCamera"
         static let streamURLOverrides = "streamURLOverrides"
+        static let homeAssistantServerURL = "homeAssistantServerURL"
     }
 
     private let defaults: UserDefaults
@@ -34,6 +35,13 @@ final class SettingsStore: @unchecked Sendable {
     var autoOpenLastCamera: Bool {
         get { defaults.bool(forKey: Key.autoOpenLastCamera) }
         set { defaults.set(newValue, forKey: Key.autoOpenLastCamera) }
+    }
+
+    /// Adresse des Home-Assistant-Servers, z. B. `http://192.168.1.10:8123`.
+    /// Das zugehörige Token liegt nicht hier, sondern in der Keychain.
+    var homeAssistantServerURL: URL? {
+        get { defaults.string(forKey: Key.homeAssistantServerURL).flatMap(HomeAssistantConfiguration.serverURL(from:)) }
+        set { defaults.set(newValue?.absoluteString, forKey: Key.homeAssistantServerURL) }
     }
 
     /// Vom Benutzer gesetzte Stream-URLs je Kamera-ID. Ungültige Einträge werden ignoriert.

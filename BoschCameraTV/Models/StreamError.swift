@@ -66,9 +66,9 @@ enum StreamError: Error, Equatable, Sendable {
         case .streamEnded:
             return "Der Live-Stream wurde vom Server beendet."
         case .unauthorized:
-            return "Der Server hat den Zugriff abgelehnt (HTTP 401/403). Prüfe die Stream-URL bzw. das darin enthaltene Token."
+            return "Der Server hat den Zugriff abgelehnt (HTTP 401/403). Prüfe das Home-Assistant-Token in den Einstellungen bzw. die Stream-URL."
         case .missingStreamURL:
-            return "Hinterlege die Stream-URL in Cameras.json oder in den Einstellungen der App."
+            return "Verbinde Home Assistant in den Einstellungen oder hinterlege dort bzw. in Cameras.json eine Stream-URL."
         case .invalidStreamURL:
             return "Es werden nur http:// und https:// URLs auf einen HLS-Stream (.m3u8) unterstützt."
         case .insecureConnectionBlocked:
@@ -91,6 +91,10 @@ extension StreamError {
     init(classifying error: any Error) {
         if let streamError = error as? StreamError {
             self = streamError
+            return
+        }
+        if let homeAssistantError = error as? HomeAssistantError {
+            self = homeAssistantError.streamError
             return
         }
         if let urlErrorCode = Self.firstURLErrorCode(in: error as NSError) {

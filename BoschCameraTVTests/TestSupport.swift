@@ -118,3 +118,68 @@ func waitUntil(timeout: Duration = .seconds(3), _ condition: () -> Bool) async -
     }
     return true
 }
+
+// MARK: - Home Assistant
+
+/// Token-Speicher im Arbeitsspeicher statt Keychain.
+final class InMemoryTokenStore: HomeAssistantTokenStoring, @unchecked Sendable {
+    private let lock = NSLock()
+    private var token: String?
+
+    init(token: String? = nil) {
+        self.token = token
+    }
+
+    func accessToken() throws -> String? {
+        lock.withLock { token }
+    }
+
+    func setAccessToken(_ token: String) throws {
+        lock.withLock { self.token = token }
+    }
+
+    func removeAccessToken() throws {
+        lock.withLock { token = nil }
+    }
+}
+
+/// Ersetzt den echten Home-Assistant-Client; zählt Aufrufe.
+final class FakeHomeAssistantAPI: HomeAssistantAPI, @unchecked Sendable {
+    private let lock = NSLock()
+    private let camerasResult: Result<[Camera], HomeAssistantError>
+    private let streamResult: Result<URL, HomeAssistantError>
+    private var _requestedEntities: [String] = []
+
+    init(
+        cameras: Result<[Camera], HomeAssistantError> = .success([]),
+        stream: Result<URL, HomeAssistantError> = .failure(.invalidResponse)
+    ) {
+        camerasResult = cameras
+        streamResult = stream
+    }
+
+    var requestedEntities: [String] {
+        lock.withLock { _requestedEntities }
+    }
+
+    func cameras(configuration: HomeAssistantConfiguration) async throws -> [Camera] {
+        try camerasResult.get()
+    }
+
+    func streamURL(forEntity entityID: String, configuration: HomeAssistantConfiguration) async throws -> URL {
+        lock.withLock { _requestedEntities.append(entityID) }
+        return try streamResult.get()
+    }
+}
+
+enum TestHomeAssistant {
+    static let serverURL = URL(string: "http://192.168.1.10:8123")!
+    static let entrance = Camera(id: "camera.bosch_eingang", name: "Eingang", streamURL: nil)
+
+    /// Konfiguration mit gesetztem Server und Token.
+    static func configured(_ defaults: UserDefaults, token: String? = "token") -> HomeAssistantConfigurationProvider {
+        let settings = SettingsStore(defaults: defaults)
+        settings.homeAssistantServerURL = serverURL
+        return HomeAssistantConfigurationProvider(settings: settings, tokens: InMemoryTokenStore(token: token))
+    }
+}

@@ -6,6 +6,8 @@ import Testing
 struct SettingsViewModelTests {
     let isolated = IsolatedDefaults()
     let settings: SettingsStore
+    let tokens = InMemoryTokenStore()
+    let api = FakeHomeAssistantAPI(cameras: .success([TestHomeAssistant.entrance]))
     let viewModel: SettingsViewModel
 
     init() {
@@ -14,7 +16,13 @@ struct SettingsViewModelTests {
             provider: StubCameraProvider([TestCameras.frontDoor, TestCameras.garage]),
             settings: settings
         )
-        viewModel = SettingsViewModel(cameraService: service, settings: settings, configurationSummary: "Test")
+        viewModel = SettingsViewModel(
+            cameraService: service,
+            settings: settings,
+            homeAssistant: HomeAssistantConfigurationProvider(settings: settings, tokens: tokens),
+            api: api,
+            localConfigurationSummary: "Cameras.json"
+        )
     }
 
     @Test func listsAllConfiguredCameras() async {
@@ -82,5 +90,80 @@ struct SettingsViewModelTests {
 
         #expect(!viewModel.autoOpenLastCamera)
         #expect(!settings.autoOpenLastCamera)
+    }
+
+    // MARK: Home Assistant
+
+    @Test func storesServerAndTokenSeparately() throws {
+        #expect(!viewModel.isHomeAssistantConfigured)
+        #expect(viewModel.configurationSummary == "Cameras.json")
+
+        viewModel.updateServerURL("192.168.1.10:8123")
+        viewModel.saveToken("  geheimes-token  ")
+
+        #expect(settings.homeAssistantServerURL == TestHomeAssistant.serverURL)
+        #expect(try tokens.accessToken() == "geheimes-token")
+        #expect(viewModel.serverURLText == "http://192.168.1.10:8123")
+        #expect(viewModel.hasStoredToken)
+        #expect(viewModel.isHomeAssistantConfigured)
+        #expect(viewModel.configurationSummary == "Home Assistant (192.168.1.10)")
+    }
+
+    @Test func rejectsInvalidServerURL() {
+        viewModel.updateServerURL("rtsp://192.168.1.10")
+
+        #expect(viewModel.serverURLValidationMessage == SettingsViewModel.invalidServerURLMessage)
+        #expect(settings.homeAssistantServerURL == nil)
+    }
+
+    @Test func ignoresEmptyToken() throws {
+        viewModel.saveToken("   ")
+
+        #expect(try tokens.accessToken() == nil)
+        #expect(!viewModel.hasStoredToken)
+    }
+
+    @Test func changesBumpRevisionForReload() {
+        let before = viewModel.configurationRevision
+
+        viewModel.updateServerURL("http://192.168.1.10:8123")
+        viewModel.saveToken("token")
+
+        #expect(viewModel.configurationRevision == before + 2)
+    }
+
+    @Test func testsConnection() async {
+        viewModel.updateServerURL("http://192.168.1.10:8123")
+        viewModel.saveToken("token")
+
+        await viewModel.testConnection()
+
+        #expect(viewModel.connectionStatus == .connected(cameraCount: 1))
+    }
+
+    @Test func reportsFailedConnectionTest() async {
+        let failing = SettingsViewModel(
+            cameraService: CameraService(provider: StubCameraProvider([]), settings: settings),
+            settings: settings,
+            homeAssistant: HomeAssistantConfigurationProvider(settings: settings, tokens: InMemoryTokenStore(token: "t")),
+            api: FakeHomeAssistantAPI(cameras: .failure(.unauthorized)),
+            localConfigurationSummary: "Cameras.json"
+        )
+        settings.homeAssistantServerURL = TestHomeAssistant.serverURL
+
+        await failing.testConnection()
+
+        #expect(failing.connectionStatus == .failed(HomeAssistantError.unauthorized.localizedDescription))
+    }
+
+    @Test func disconnectRemovesServerAndToken() throws {
+        viewModel.updateServerURL("http://192.168.1.10:8123")
+        viewModel.saveToken("token")
+
+        viewModel.disconnectHomeAssistant()
+
+        #expect(settings.homeAssistantServerURL == nil)
+        #expect(try tokens.accessToken() == nil)
+        #expect(!viewModel.isHomeAssistantConfigured)
     }
 }
