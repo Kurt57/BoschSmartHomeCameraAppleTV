@@ -119,8 +119,9 @@ final class SettingsViewModel {
     }
 
     /// Speichert ein neues Token in der Keychain. Leere Eingaben ändern nichts.
+    /// Leerzeichen und Zeilenumbrüche (z. B. aus dem Kopieren) werden entfernt.
     func saveToken(_ text: String) {
-        let token = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let token = String(text.unicodeScalars.filter { !CharacterSet.whitespacesAndNewlines.contains($0) })
         guard !token.isEmpty else { return }
         do {
             try homeAssistant.tokens.setAccessToken(token)

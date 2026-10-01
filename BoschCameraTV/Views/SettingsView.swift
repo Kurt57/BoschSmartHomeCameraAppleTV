@@ -77,10 +77,15 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Langlebiges Zugangs-Token")
                     .font(.headline)
-                SecureField(
-                    viewModel.hasStoredToken ? "Gespeichert – zum Ersetzen neu eingeben" : "Token einfügen",
+                // Bewusst kein SecureField: Dort lässt tvOS weder Einfügen noch die
+                // iPhone-Tastatur zu – das lange Token wäre praktisch nicht eingebbar.
+                // Das gespeicherte Token wird trotzdem nie angezeigt (Feld bleibt leer).
+                TextField(
+                    viewModel.hasStoredToken ? "Gespeichert – zum Ersetzen neu einfügen" : "Token einfügen",
                     text: tokenBinding
                 )
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
                 if let message = viewModel.tokenErrorMessage {
                     Text(message)
                         .font(.caption)

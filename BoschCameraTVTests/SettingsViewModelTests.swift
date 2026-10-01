@@ -116,6 +116,12 @@ struct SettingsViewModelTests {
         #expect(settings.homeAssistantServerURL == nil)
     }
 
+    @Test func removesLineBreaksFromPastedToken() throws {
+        viewModel.saveToken("eyJhbGciOi\nJIUzI1NiJ9 .abc\r\n")
+
+        #expect(try tokens.accessToken() == "eyJhbGciOiJIUzI1NiJ9.abc")
+    }
+
     @Test func ignoresEmptyToken() throws {
         viewModel.saveToken("   ")
 
